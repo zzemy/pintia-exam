@@ -9,6 +9,8 @@ metadata:
 
 # PTA 题目集自动作答
 
+> 免责声明：本项目仅供个人学习、复习与技术研究使用；用于计入成绩的作业或考试通常违反学术规范，由此产生的一切后果由使用者自负。
+
 覆盖 pintia.cn「题目集 / 考试（exam）」下的四类题型：单选题、填空题、程序填空题、编程题。把「看清页面 → 填答 → 保存/提交 → 核对」这条链路固化下来。
 
 ## 0. 前提与定位
@@ -120,21 +122,21 @@ run_skill skill=pintia-exam script=scripts/submissions.js tabId=<PTA标签页> a
 
 选择器会随版本变：脚本一律**按文案或 `contenteditable` 定位**，不硬套 `nth-of-type` 长路径；要点击时先用 `inspect` 重新发现。
 
-## 踩过的坑
+## 实现要点
 
-- **React 受控输入**：`el.value = x` 不会同步到答题状态，必须用原生 setter + 派发 `input` / `change`，并 `focus()` → `blur()` 触发 `focusout`（`fill-blanks.js` 已处理）。
-- **CodeMirror 6 的 `execCommand('insertText')` 是假的**：它只改 DOM 文本，**不改 `view.state`**，页面一重渲染就丢。必须 `view.dispatch({changes:{from:0,to:doc.length,insert:code}})`。
-- **`document.querySelector('.cm-content')` 抓到的是样例输入框**（只读）。认 `.cm-content[contenteditable="true"]`；判断视图挂在哪：`el.cmTile.view`。
-- 填空/程序填空题**一页多题共用一个「保存」**：只填不按保存 = 白填。
-- 「提交本题作答」**无二次确认**；点「查看上次提交」看历史是安全的，用 `read-code.js` 的 `buttons` 先确认按钮文案再点。
-- 提交列表里填空题/程序填空题是**整份**一条记录（不是每空一条）。
-- 写选择器时不要带 `input[type="text"]`——PTA 的输入框没有 `type` 属性，会什么都抓不到。
+- **React 受控输入**：直接赋值 `el.value` 不会同步到答题状态；需用原生 setter 赋值并派发 `input` / `change`，再 `focus()` → `blur()` 触发 `focusout`（`fill-blanks.js` 已处理）。
+- **CodeMirror 6 的 `execCommand('insertText')` 不会同步视图状态**：它只改 DOM 文本，`view.state` 不变，页面重渲染即丢失。应调用 `view.dispatch({changes:{from:0,to:doc.length,insert:code}})`。
+- **`document.querySelector('.cm-content')` 命中的是只读样例框**；可编辑的实例带 `contenteditable="true"`，其视图对象挂在 `el.cmTile.view`。
+- 填空题与程序填空题**整卷共用一个「保存」**：只填不保存，答案不会提交到服务端。
+- 「提交本题作答」**没有二次确认**；查看历史提交用「查看上次提交」，点击前先用 `read-code.js` 的 `buttons` 确认按钮文案。
+- 提交列表中，填空题与程序填空题是**整份一条记录**，不是每空一条。
+- 选择器避免使用 `input[type="text"]`：PTA 的输入框没有 `type` 属性。
 
-## 维护说明（改脚本前先看）
+## 维护说明
 
-- 脚本用 `module.exports = <值>` 返回结果，内部可以自由用顶层 `await`。
-- `executeInPage(code)` 把注入代码当 **async 函数体**执行：必须用**顶层 `return`**；写成 `(() => { return x })()` 只会拿到 `(no return value)`。
-- `executeInPage` 的返回值是**字符串**（对象被 JSON 序列化），所以脚本里统一 `let out = raw; try { out = JSON.parse(raw) } catch (e) {}`。
-- 注入代码用 `String.raw` 模板写（反斜杠不被模板字面量吃掉），插值用 `${JSON.stringify(x)}`（`String.raw` 仍然插值）。
-- 权限必须写在 front matter 的 `metadata.permissions` 下（`page.executeJs` 才会提供 `executeInPage`）；写在外层 `permissions:` 不生效。
-- 除 `submit-code.js` 外其余脚本都是只读/幂等的，随便重复跑。
+- 脚本用 `module.exports = <值>` 返回结果，内部可以使用顶层 `await`。
+- `executeInPage(code)` 把注入代码作为 **async 函数体**执行：必须用**顶层 `return`**；写成 `(() => { return x })()` 只会得到 `(no return value)`。
+- `executeInPage` 的返回值是**字符串**（对象被 JSON 序列化），脚本内统一 `let out = raw; try { out = JSON.parse(raw) } catch (e) {}`。
+- 注入代码用 `String.raw` 模板编写（反斜杠不被模板字面量转义），插值用 `${JSON.stringify(x)}`。
+- 权限需写在 front matter 的 `metadata.permissions` 下（`page.executeJs` 才会提供 `executeInPage`）；写在外层 `permissions:` 不生效。
+- 除 `submit-code.js` 外，其余脚本都是只读或幂等的，可重复执行。
